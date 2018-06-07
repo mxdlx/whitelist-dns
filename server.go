@@ -13,8 +13,8 @@ import (
 // All Prints must be log
 // Read domain list from file
 
-var clienteGetter = clienteRedis()
-var clienteSetter = clienteRedis()
+var ClienteGetter = clienteRedis()
+var ClienteSetter = clienteRedis()
 
 func clienteRedis() *redis.Client {
   client := redis.NewClient(&redis.Options{
@@ -66,11 +66,11 @@ func generarCache(c *redis.Client) {
 
 }
 
-func handleDnsRequests(w dns.ResponseWriter, r *dns.Msg){
+func handlerRedis(w dns.ResponseWriter, r *dns.Msg){
   var direccion string
 
   dominio := strings.TrimSuffix(r.Question[0].Name, ".")
-  direccion, err := clienteSetter.Get(dominio).Result()
+  direccion, err := ClienteGetter.Get(dominio).Result()
 
   if err != nil {
     fmt.Printf("[ALERTA] Dominio %s no permitido - Redis dice: %s\n", dominio, err)
@@ -95,7 +95,7 @@ func servidor() {
 }
 
 func main() {
-  go generarCache(clienteSetter)
-  dns.HandleFunc(".", handleDnsRequests)
+  go generarCache(ClienteSetter)
+  dns.HandleFunc(".", handlerRedis)
   servidor()
 }
