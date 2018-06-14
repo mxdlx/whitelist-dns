@@ -4,6 +4,7 @@ import (
   "github.com/miekg/dns"
   "github.com/go-redis/redis"
   "fmt"
+  "log"
   "net"
   "strings"
   "time"
@@ -15,6 +16,7 @@ import (
 
 var ClienteGetter = clienteRedis()
 var ClienteSetter = clienteRedis()
+var Nameserver string
 
 func clienteRedis() *redis.Client {
   client := redis.NewClient(&redis.Options{
@@ -23,12 +25,12 @@ func clienteRedis() *redis.Client {
 	    DB: 0,
   })
 
-  pong, err := client.Ping().Result()
+  _, err := client.Ping().Result()
   if err != nil {
-    fmt.Println("[ERROR] No se pudo conectar al servidor de Redis.")
+    fmt.Println("[ERROR] No se pudo conectar al servidor de Redis!")
     panic(err)
   }
-  fmt.Println(pong)
+
   return client
 }
 
@@ -37,9 +39,9 @@ func resolverDominio(dominio string) string {
   m.Id = dns.Id()
   m.Question = make([]dns.Question, 1)
   m.SetQuestion(dns.Fqdn(dominio), dns.TypeA)
-  respuesta := ""
+  var respuesta string
 
-  in, _ := dns.Exchange(m, "8.8.8.8:53")
+  in, _ := dns.Exchange(m, Nameserver + ":53")
 
   for _, registro := range in.Answer {
     if a, ok := registro.(*dns.A); ok {
@@ -52,16 +54,20 @@ func resolverDominio(dominio string) string {
 
 func generarCache(c *redis.Client) {
   for {
-    var dominios []string
-    dominios = append(dominios, "www.google.com", "www.amazon.com")
+
+    dominios, err := c.Keys("*").Result()
+    log.Output(0, "[INFO] Resolviendo direcciones para " + strings.Join(dominios, ",") + ".")
+    if err != nil {
+      log.Output(0, "[ERROR] Hubo un error al obtener llaves desde Redis!")
+    }
 
     for _, dominio := range dominios {
       err := c.Set(dominio, resolverDominio(dominio), 0).Err()
       if err != nil {
-        panic(err)
+        log.Output(0, "[ERROR] Hubo un error al intentar establecer un par en Redis!")
       }
     }
-    time.Sleep(5 * time.Second)
+    time.Sleep(30 * time.Second)
   }
 
 }
@@ -88,13 +94,27 @@ func handlerRedis(w dns.ResponseWriter, r *dns.Msg){
 }
 
 func servidor() {
-  srv := &dns.Server{Addr: "127.0.0.1:2053", Net: "udp"}
+	srv := &dns.Server{Addr: "0.0.0.0:53", Net: "udp"}
   if err := srv.ListenAndServe(); err != nil {
     panic(err)
   }
 }
 
 func main() {
+
+  resolvConfHandler, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+
+  if err != nil {
+    log.Fatal(err.Error())
+  }
+
+  if len(resolvConfHandler.Servers) > 0 {
+    Nameserver = resolvConfHandler.Servers[0]
+    log.Output(0, "[INFO] El servidor obtenido es " + Nameserver)
+  } else {
+    log.Fatal("[ERROR] No hay servidores DNS disponibles configurados en el sistema!")
+  }
+
   go generarCache(ClienteSetter)
   dns.HandleFunc(".", handlerRedis)
   servidor()
