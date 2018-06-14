@@ -16,13 +16,12 @@ import (
 
 var ClienteGetter = clienteRedis()
 var ClienteSetter = clienteRedis()
+var Redisserver string = os.Getenv("REDIS_HOST")
 var Nameserver string
 
 func clienteRedis() *redis.Client {
   client := redis.NewClient(&redis.Options{
-	    Addr: "localhost:6379",
-	    Password: "",
-	    DB: 0,
+	    Addr: "Redisserver" + ":6379",
   })
 
   _, err := client.Ping().Result()
