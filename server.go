@@ -22,7 +22,7 @@ var Nameserver string
 
 func clienteRedis() *redis.Client {
   client := redis.NewClient(&redis.Options{
-	    Addr: "Redisserver" + ":6379",
+	    Addr: Redisserver + ":6379",
   })
 
   _, err := client.Ping().Result()
